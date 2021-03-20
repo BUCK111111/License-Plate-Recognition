@@ -14,5 +14,5 @@ License Plate Recognition For Car With Python And OpenCV
 ##### 有任何疑问请邮件至 wzh191920@sina.com
 
 ##### 界面效果：
-![](https://gitee.com/wzh191920/License-Plate-Recognition/blob/master/Screenshots/3.png)
-![](https://gitee.com/wzh191920/License-Plate-Recognition/blob/master/Screenshots/5.png)
+![](https://gitee.com/wzh191920/License-Plate-Recognition/tree/master/Screenshots/3.png)
+![](https://gitee.com/wzh191920/License-Plate-Recognition/tree/master/Screenshots/5.png)
