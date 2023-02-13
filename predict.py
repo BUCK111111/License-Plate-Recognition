@@ -9,6 +9,11 @@ SZ = 20          #训练图片长宽
 MAX_WIDTH = 1000 #原始图片最大宽度
 Min_Area = 2000  #车牌区域允许最大面积
 PROVINCE_START = 1000
+#显示图片
+def cv_show(name,img):
+    cv2.imshow(name,img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 #读取图片文件
 def imreadex(filename):
 	return cv2.imdecode(np.fromfile(filename, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -197,6 +202,7 @@ class CardPredictor:
 			print(chars_train.shape)
 			self.modelchinese.train(chars_train, chars_label)
 
+	#保存模型
 	def save_traindata(self):
 		if not os.path.exists("svm.dat"):
 			self.model.save("svm.dat")
@@ -268,6 +274,7 @@ class CardPredictor:
 		kernel = np.ones((20, 20), np.uint8)
 		img_opening = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
 		img_opening = cv2.addWeighted(img, 1, img_opening, -1, 0);
+		cv_show("1",img_opening)
 
 		#找到图像边缘
 		ret, img_thresh = cv2.threshold(img_opening, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -276,6 +283,7 @@ class CardPredictor:
 		kernel = np.ones((self.cfg["morphologyr"], self.cfg["morphologyc"]), np.uint8)
 		img_edge1 = cv2.morphologyEx(img_edge, cv2.MORPH_CLOSE, kernel)
 		img_edge2 = cv2.morphologyEx(img_edge1, cv2.MORPH_OPEN, kernel)
+		cv_show("2", img_edge2)
 
 		#查找图像边缘整体形成的矩形区域，可能有很多，车牌就在其中一个矩形区域中
 		try:
@@ -297,7 +305,8 @@ class CardPredictor:
 			if wh_ratio > 2 and wh_ratio < 5.5:
 				car_contours.append(rect)
 				box = cv2.boxPoints(rect)
-				box = np.int0(box)
+				#box = np.int0(box)
+				box = np.int_(box)
 				#oldimg = cv2.drawContours(oldimg, [box], 0, (0, 0, 255), 2)
 				#cv2.imshow("edge4", oldimg)
 				#cv2.waitKey(0)
@@ -352,8 +361,8 @@ class CardPredictor:
 				point_limit(new_left_point)
 				card_img = dst[int(right_point[1]):int(heigth_point[1]), int(new_left_point[0]):int(right_point[0])]
 				card_imgs.append(card_img)
-				#cv2.imshow("card", card_img)
-				#cv2.waitKey(0)
+				cv_show("card", card_img)
+
 		#开始使用颜色定位，排除不是车牌的矩形，目前只识别蓝、绿、黄车牌
 		colors = []
 		for card_index,card_img in enumerate(card_imgs):
@@ -401,8 +410,8 @@ class CardPredictor:
 			print(color)
 			colors.append(color)
 			print(blue, green, yello, black, white, card_img_count)
-			#cv2.imshow("color", card_img)
-			#cv2.waitKey(0)
+			cv_show("color", card_img)
+
 			if limit1 == 0:
 				continue
 			#以上为确定车牌颜色
@@ -515,8 +524,7 @@ class CardPredictor:
 					w = part_card.shape[1] // 3
 					part_card = cv2.copyMakeBorder(part_card, 0, 0, w, w, cv2.BORDER_CONSTANT, value = [0,0,0])
 					part_card = cv2.resize(part_card, (SZ, SZ), interpolation=cv2.INTER_AREA)
-					#cv2.imshow("part", part_card_old)
-					#cv2.waitKey(0)
+					cv_show("part", part_card_old)
 					#cv2.imwrite("u.jpg", part_card)
 					#part_card = deskew(part_card)
 					part_card = preprocess_hog([part_card])
@@ -541,6 +549,6 @@ class CardPredictor:
 if __name__ == '__main__':
 	c = CardPredictor()
 	c.train_svm()
-	r, roi, color = c.predict("2.jpg")
+	r, roi, color = c.predict("test.jpg")
 	print(r)
 	
