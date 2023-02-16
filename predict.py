@@ -9,22 +9,34 @@ SZ = 20          #训练图片长宽
 MAX_WIDTH = 1000 #原始图片最大宽度
 Min_Area = 2000  #车牌区域允许最大面积
 PROVINCE_START = 1000
-#显示图片
+
+#画出疑似轮廓
+def my_drawContours(oldimg,contours):
+	img=oldimg.copy()
+	img = cv2.drawContours(img, contours, 0, (0, 0, 255), 2)
+	cv_show("test", img)
+#中文转码
+def zh_ch(string):
+	return string.encode("gbk").decode(errors="ignore")
+# 显示图片
 def cv_show(name,img):
-    cv2.imshow(name,img)
+    cv2.imshow(zh_ch(name),img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-#读取图片文件
+# 读取图片文件
 def imreadex(filename):
+	#cv2.imdecode()函数从指定的内存缓存中读取数据，并把数据转换(解码)成图像格式;主要用于从网络传输数据中恢复出图像。
+	#读取已知数据类型的二进制数据以及解析简单格式化的文本文件的一种高效方法。使用tofile方法写入的数据可以使用此函数读取。
 	return cv2.imdecode(np.fromfile(filename, dtype=np.uint8), cv2.IMREAD_COLOR)
-	
+
+# ??
 def point_limit(point):
 	if point[0] < 0:
 		point[0] = 0
 	if point[1] < 0:
 		point[1] = 0
 
-#根据设定的阈值和图片直方图，找出波峰，用于分隔字符
+# 根据设定的阈值和图片直方图，找出波峰，用于--->分隔字符
 def find_waves(threshold, histogram):
 	up_point = -1#上升点
 	is_peak = False
@@ -44,10 +56,11 @@ def find_waves(threshold, histogram):
 		wave_peaks.append((up_point, i))
 	return wave_peaks
 
-#根据找出的波峰，分隔图片，从而得到逐个字符图片
+#根据找出的波峰，分隔图片，从而得到---->逐个字符图片
 def seperate_card(img, waves):
 	part_cards = []
 	for wave in waves:
+		#cv2.imshow("seperate_card",img[:, wave[0]:wave[1]])
 		part_cards.append(img[:, wave[0]:wave[1]])
 	return part_cards
 
@@ -162,7 +175,7 @@ class CardPredictor:
 			chars_label = []
 			
 			for root, dirs, files in os.walk("train\\chars2"):
-				if len(os.path.basename(root)) > 1:
+				if len(os.path.basename(root)) > 1:#os.path.basename()方法将指定的路径拆分为后返回尾部(头，尾)对
 					continue
 				root_int = ord(os.path.basename(root))
 				for filename in files:
@@ -247,71 +260,89 @@ class CardPredictor:
 		return xl, xr, yh, yl
 		
 	def predict(self, car_pic, resize_rate=1):
-		if type(car_pic) == type(""):
+
+		# ---------------图片读取--------------
+		if type(car_pic) == type(""):#字符串类型
 			img = imreadex(car_pic)
-		else:
+		else:#图片类型
 			img = car_pic
+
+
+		# ---------------图片比列预处理--------------
 		pic_hight, pic_width = img.shape[:2]
-		if pic_width > MAX_WIDTH:
+		if pic_width > MAX_WIDTH:#缩放图片比列
 			pic_rate = MAX_WIDTH / pic_width
 			img = cv2.resize(img, (MAX_WIDTH, int(pic_hight*pic_rate)), interpolation=cv2.INTER_LANCZOS4)
 			pic_hight, pic_width = img.shape[:2]
-		
 		if resize_rate != 1:
 			img = cv2.resize(img, (int(pic_width*resize_rate), int(pic_hight*resize_rate)), interpolation=cv2.INTER_LANCZOS4)
 			pic_hight, pic_width = img.shape[:2]
 			
-		print("h,w:", pic_hight, pic_width)
+		print("图片修正后-->长:%s,宽:%s" %(pic_hight, pic_width))
+
+		# ---------------高斯去噪--------------
 		blur = self.cfg["blur"]
-		#高斯去噪
 		if blur > 0:
 			img = cv2.GaussianBlur(img, (blur, blur), 0)#图片分辨率调整
+			cv_show("GaussianBlur",img)
 		oldimg = img
-		img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+		img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)#cvtcolor()函数是一个颜色空间转换函数，转换为灰度图。
+		cv_show("cvtColor-GRAY", img)
 		#equ = cv2.equalizeHist(img)
 		#img = np.hstack((img, equ))
-		#去掉图像中不会是车牌的区域
+
+
+		#------------------去掉图像中不会是车牌的区域--------------
 		kernel = np.ones((20, 20), np.uint8)
 		img_opening = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel)
-		img_opening = cv2.addWeighted(img, 1, img_opening, -1, 0);
-		cv_show("1",img_opening)
+		cv_show("MORPH_OPEN", img_opening)
+		img_opening = cv2.addWeighted(img, 1, img_opening, -1, 0);#将两张源图片以一定的权重进行混合
+		cv_show("addWeighted",img_opening)
 
-		#找到图像边缘
+
+		#----------------找到图像边缘--------------
 		ret, img_thresh = cv2.threshold(img_opening, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+		cv_show("threshold", img_thresh)
 		img_edge = cv2.Canny(img_thresh, 100, 200)
-		#使用开运算和闭运算让图像边缘成为一个整体
+		cv_show("Canny", img_edge)
+
+
+		#-----------------使用开运算和闭运算让图像边缘成为一个整体---------------
 		kernel = np.ones((self.cfg["morphologyr"], self.cfg["morphologyc"]), np.uint8)
 		img_edge1 = cv2.morphologyEx(img_edge, cv2.MORPH_CLOSE, kernel)
+		cv_show("MORPH_CLOSE", img_edge1)
 		img_edge2 = cv2.morphologyEx(img_edge1, cv2.MORPH_OPEN, kernel)
-		cv_show("2", img_edge2)
+		cv_show("MORPH_OPEN", img_edge2)
 
-		#查找图像边缘整体形成的矩形区域，可能有很多，车牌就在其中一个矩形区域中
+		#--------------查找图像边缘整体形成的矩形区域，可能有很多，车牌就在其中一个矩形区域中-------------
 		try:
 			contours, hierarchy = cv2.findContours(img_edge2, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 		except ValueError:
 			image, contours, hierarchy = cv2.findContours(img_edge2, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+		print('备选区(contours)个数:', len(contours))
+		#----------------计算轮廓(contourArea)的面积,去除小于2000像素的备选区--------------------------
 		contours = [cnt for cnt in contours if cv2.contourArea(cnt) > Min_Area]
-		print('len(contours)', len(contours))
-		#一一排除不是车牌的矩形区域
+
+
+		# ----------------------逐一排除contours个数不是车牌的矩形区域-------------------
+		# 返回不规则四边形的最⼩外接矩形 minAreaRect
+		# (center(x,y), (width, height), angle of rotation) = cv2.minAreaRect(cnt)
 		car_contours = []
 		for cnt in contours:
 			rect = cv2.minAreaRect(cnt)
 			area_width, area_height = rect[1]
-			if area_width < area_height:
+			if area_width < area_height:#调整长宽关系类车牌：长<宽
 				area_width, area_height = area_height, area_width
 			wh_ratio = area_width / area_height
 			#print(wh_ratio)
-			#要求矩形区域长宽比在2到5.5之间，2到5.5是车牌的长宽比，其余的矩形排除
-			if wh_ratio > 2 and wh_ratio < 5.5:
+			if wh_ratio > 2 and wh_ratio < 5.5:#要求矩形区域长宽比在2到5.5之间，2到5.5是车牌的长宽比，其余的矩形排除
 				car_contours.append(rect)
-				box = cv2.boxPoints(rect)
-				#box = np.int0(box)
+				box = cv2.boxPoints(rect)#boxPoints获取矩形的四个顶点坐标函数
 				box = np.int_(box)
-				#oldimg = cv2.drawContours(oldimg, [box], 0, (0, 0, 255), 2)
-				#cv2.imshow("edge4", oldimg)
-				#cv2.waitKey(0)
+				my_drawContours(oldimg,[box])
 
-		print(len(car_contours))
+
+		print("筛选后备选区(contours)个数:",len(car_contours))
 
 		print("精确定位")
 		card_imgs = []
@@ -549,6 +580,6 @@ class CardPredictor:
 if __name__ == '__main__':
 	c = CardPredictor()
 	c.train_svm()
-	r, roi, color = c.predict("test.jpg")
+	r, roi, color = c.predict("G:/PythonCode-total/License-Plate-Recognition/test/wATH859.jpg")
 	print(r)
 	
